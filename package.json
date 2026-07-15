@@ -1,17 +1,19 @@
 {
-  "name": "ai-cloud-terminal",
+  "name": "nodejs",
   "version": "1.0.0",
-  "description": "AI Cloud Terminal — local AI via Ollama, no API key required",
+  "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["ai", "terminal", "ollama", "local-llm"],
+  "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@gradio/client": "^2.3.1",
+    "@huggingface/inference": "^4.13.23",
     "@types/node": "^22.13.11",
-    "express": "^4.18.2",
-    "socket.io": "^4.7.5"
+    "express": "^5.2.1",
+    "node-fetch": "^3.3.2"
   }
 }
