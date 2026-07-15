@@ -1,0 +1,1751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Cloud Terminal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ═══════════════════════════════════════════════
+       DESIGN TOKENS
+    ═══════════════════════════════════════════════ */
+    :root {
+      --bg:          #050811;
+      --bg2:         #080d1a;
+      --surface:     #0d1424;
+      --surface2:    #111827;
+      --border:      rgba(99,179,237,0.12);
+      --border2:     rgba(99,179,237,0.06);
+      --accent:      #63b3ed;
+      --accent-glow: rgba(99,179,237,0.25);
+      --accent2:     #68d391;
+      --accent3:     #b794f4;
+      --warn:        #f6ad55;
+      --danger:      #fc8181;
+      --text:        #e8f4fd;
+      --text2:       #a0b4c8;
+      --muted:       #4a6080;
+      --cyan:        #76e4f7;
+      --pink:        #f687b3;
+      --sidebar-w:   340px;
+      --header-h:    60px;
+      --radius:      14px;
+      --radius-sm:   8px;
+      --trans:       cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ═══════════════════════════════════════════════
+       RESET & BASE
+    ═══════════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ═══════════════════════════════════════════════
+       ANIMATED BACKGROUND
+    ═══════════════════════════════════════════════ */
+    #canvas-bg {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.5;
+    }
+
+    .grid-overlay {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background-image:
+        linear-gradient(rgba(99,179,237,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99,179,237,0.04) 1px, transparent 1px);
+      background-size: 50px 50px;
+      mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 20%, transparent 100%);
+    }
+
+    /* ═══════════════════════════════════════════════
+       SCROLLBAR
+    ═══════════════════════════════════════════════ */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+    /* ═══════════════════════════════════════════════
+       HEADER
+    ═══════════════════════════════════════════════ */
+    header {
+      height: var(--header-h);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+      flex-shrink: 0;
+      z-index: 100;
+      position: relative;
+      background: linear-gradient(180deg, rgba(5,8,17,0.98) 0%, rgba(5,8,17,0.9) 100%);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+
+    header::before {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), var(--accent3), var(--accent2), transparent);
+      opacity: 0.6;
+      animation: shimmer 4s ease-in-out infinite;
+    }
+
+    @keyframes shimmer {
+      0%, 100% { opacity: 0.3; transform: scaleX(0.8); }
+      50% { opacity: 0.8; transform: scaleX(1); }
+    }
+
+    .logo {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 800; font-size: 15px;
+      letter-spacing: -0.3px;
+      color: var(--text);
+      flex-shrink: 0;
+    }
+
+    .logo-icon {
+      width: 34px; height: 34px;
+      background: linear-gradient(135deg, var(--accent), var(--accent3));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 0 20px var(--accent-glow);
+      animation: logo-pulse 3s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes logo-pulse {
+      0%, 100% { box-shadow: 0 0 20px var(--accent-glow); }
+      50% { box-shadow: 0 0 35px rgba(99,179,237,0.5), 0 0 60px rgba(183,148,244,0.2); }
+    }
+
+    .logo-text { display: flex; flex-direction: column; line-height: 1; }
+    .logo-name { font-size: 14px; font-weight: 800; }
+    .logo-sub { font-size: 9px; color: var(--muted); font-weight: 500; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 2px; }
+
+    .tab-bar {
+      display: flex; gap: 4px;
+      margin-left: 12px;
+    }
+
+    .tab {
+      padding: 7px 16px;
+      font-size: 13px; font-weight: 500;
+      border-radius: 8px;
+      cursor: pointer;
+      color: var(--text2);
+      border: 1px solid transparent;
+      transition: all 0.2s var(--trans);
+      user-select: none;
+      display: flex; align-items: center; gap: 6px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .tab::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, var(--accent), var(--accent3));
+      opacity: 0;
+      transition: opacity 0.2s;
+      border-radius: inherit;
+    }
+
+    .tab:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+
+    .tab.active {
+      color: var(--accent);
+      border-color: var(--border);
+      background: rgba(99,179,237,0.08);
+    }
+
+    .tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px; left: 20%; right: 20%;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--accent3));
+      border-radius: 2px;
+    }
+
+    .tab-icon { font-size: 14px; }
+
+    .header-sep { flex: 1; }
+
+    /* Mobile menu toggle */
+    .mobile-menu-btn {
+      display: none;
+      width: 36px; height: 36px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      align-items: center; justify-content: center;
+      cursor: pointer;
+      font-size: 18px;
+      color: var(--text2);
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .mobile-menu-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* Status pill */
+    .status-pill {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; color: var(--text2);
+      background: rgba(13,20,36,0.8);
+      border: 1px solid var(--border);
+      padding: 6px 14px;
+      border-radius: 99px;
+      backdrop-filter: blur(10px);
+      transition: all 0.3s;
+    }
+
+    .status-pill:hover { border-color: rgba(99,179,237,0.3); }
+
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--danger);
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .dot::after {
+      content: '';
+      position: absolute; inset: -3px;
+      border-radius: 50%;
+      background: var(--danger);
+      opacity: 0.3;
+    }
+
+    .dot.ok { background: var(--accent2); }
+    .dot.ok::after { background: var(--accent2); animation: dot-ring 2s ease-in-out infinite; }
+
+    @keyframes dot-ring {
+      0%, 100% { transform: scale(1); opacity: 0.4; }
+      50% { transform: scale(1.8); opacity: 0; }
+    }
+
+    /* ═══════════════════════════════════════════════
+       MAIN LAYOUT
+    ═══════════════════════════════════════════════ */
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Panels */
+    .panel {
+      display: none;
+      flex: 1;
+      overflow: hidden;
+      animation: panel-in 0.3s var(--trans);
+    }
+
+    .panel.active { display: flex; flex-direction: column; }
+
+    @keyframes panel-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ═══════════════════════════════════════════════
+       TERMINAL PANEL
+    ═══════════════════════════════════════════════ */
+    #panel-terminal {
+      background: #000;
+      position: relative;
+    }
+
+    .term-toolbar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .term-dots { display: flex; gap: 6px; }
+
+    .term-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .term-dot:hover { opacity: 0.75; }
+    .term-dot.red { background: #ff5f57; }
+    .term-dot.yellow { background: #ffbd2e; }
+    .term-dot.green { background: #28ca41; }
+
+    .term-title {
+      flex: 1;
+      text-align: center;
+      font-size: 12px;
+      color: var(--text2);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .term-actions { display: flex; gap: 6px; }
+
+    .btn-sm {
+      font-size: 11px; padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text2);
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
+      display: flex; align-items: center; gap: 4px;
+    }
+
+    .btn-sm:hover {
+      background: rgba(99,179,237,0.1);
+      color: var(--accent);
+      border-color: rgba(99,179,237,0.3);
+    }
+
+    #term-container {
+      flex: 1;
+      overflow: hidden;
+      padding: 4px 2px;
+      background: #000;
+    }
+
+    /* ═══════════════════════════════════════════════
+       AI PANEL
+    ═══════════════════════════════════════════════ */
+    #panel-ai {
+      background: var(--bg2);
+    }
+
+    .ai-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+
+    .ai-avatar {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent3), var(--accent));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 0 15px rgba(183,148,244,0.3);
+      flex-shrink: 0;
+      animation: avatar-glow 3s ease-in-out infinite;
+    }
+
+    @keyframes avatar-glow {
+      0%, 100% { box-shadow: 0 0 15px rgba(183,148,244,0.3); }
+      50% { box-shadow: 0 0 30px rgba(183,148,244,0.6); }
+    }
+
+    .ai-header-info { flex: 1; }
+    .ai-header-name { font-weight: 700; font-size: 14px; }
+    .ai-header-sub { font-size: 11px; color: var(--muted); }
+
+    .model-select-wrap { position: relative; }
+
+    .model-select {
+      appearance: none;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 28px 7px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.2s;
+      max-width: 180px;
+    }
+
+    .model-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+
+    .model-select-wrap::after {
+      content: '▾';
+      position: absolute; right: 10px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted); pointer-events: none; font-size: 11px;
+    }
+
+    /* Chat area */
+    .chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .welcome-msg {
+      text-align: center;
+      padding: 60px 30px;
+      color: var(--muted);
+      animation: fade-up 0.5s var(--trans);
+    }
+
+    .welcome-msg h3 {
+      font-size: 20px; font-weight: 700;
+      color: var(--text); margin-bottom: 10px;
+    }
+
+    .welcome-msg p { font-size: 14px; line-height: 1.6; }
+
+    .welcome-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 30px;
+      max-width: 400px;
+      margin-left: auto; margin-right: auto;
+    }
+
+    .quick-chip {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: left;
+      color: var(--text2);
+      font-family: 'Inter', sans-serif;
+    }
+
+    .quick-chip:hover {
+      background: rgba(99,179,237,0.08);
+      border-color: rgba(99,179,237,0.3);
+      color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .quick-chip-icon { font-size: 18px; display: block; margin-bottom: 5px; }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .msg {
+      display: flex; gap: 12px;
+      animation: fade-up 0.3s var(--trans);
+    }
+
+    .msg.user { flex-direction: row-reverse; }
+
+    .msg-avatar {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .msg.ai .msg-avatar {
+      background: linear-gradient(135deg, var(--accent3), var(--accent));
+    }
+
+    .msg.user .msg-avatar {
+      background: linear-gradient(135deg, var(--accent2), var(--cyan));
+    }
+
+    .msg-bubble {
+      max-width: 75%;
+      padding: 12px 16px;
+      border-radius: 14px;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .msg.ai .msg-bubble {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-top-left-radius: 4px;
+    }
+
+    .msg.user .msg-bubble {
+      background: linear-gradient(135deg, rgba(99,179,237,0.15), rgba(183,148,244,0.1));
+      border: 1px solid rgba(99,179,237,0.2);
+      border-top-right-radius: 4px;
+    }
+
+    .msg-bubble pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      overflow-x: auto;
+      margin: 8px 0;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .msg-bubble code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      background: rgba(99,179,237,0.1);
+      padding: 2px 5px;
+      border-radius: 4px;
+      color: var(--cyan);
+    }
+
+    /* Typing indicator */
+    .typing-indicator {
+      display: flex; gap: 4px; align-items: center;
+      padding: 16px;
+    }
+
+    .typing-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: typing-bounce 1.2s ease-in-out infinite;
+    }
+
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes typing-bounce {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+      30% { transform: translateY(-6px); opacity: 1; }
+    }
+
+    /* Chat input */
+    .chat-input-area {
+      padding: 14px 18px 14px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+
+    .quick-btns {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .quick-btn {
+      font-size: 11px;
+      padding: 4px 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      color: var(--text2);
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .quick-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(99,179,237,0.06);
+    }
+
+    .input-row {
+      display: flex; gap: 10px; align-items: flex-end;
+    }
+
+    #ai-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 11px 14px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: 'Inter', sans-serif;
+      resize: none;
+      outline: none;
+      height: 44px;
+      max-height: 120px;
+      transition: all 0.2s;
+      line-height: 1.5;
+    }
+
+    #ai-input:focus {
+      border-color: rgba(99,179,237,0.5);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    #ai-input::placeholder { color: var(--muted); }
+
+    .btn-send {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--accent), var(--accent3));
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      font-size: 18px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 4px 15px var(--accent-glow);
+    }
+
+    .btn-send:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 25px rgba(99,179,237,0.4);
+    }
+
+    .btn-send:active { transform: translateY(0); }
+    .btn-send:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* ═══════════════════════════════════════════════
+       SYSINFO PANEL
+    ═══════════════════════════════════════════════ */
+    #panel-sysinfo {
+      background: var(--bg2);
+      overflow-y: auto;
+    }
+
+    .sysinfo-header {
+      padding: 24px 24px 0;
+      display: flex; align-items: center; gap: 14px;
+      flex-shrink: 0;
+    }
+
+    .sysinfo-icon {
+      width: 48px; height: 48px;
+      background: linear-gradient(135deg, var(--warn), var(--pink));
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 0 20px rgba(246,173,85,0.3);
+      animation: icon-float 3s ease-in-out infinite;
+    }
+
+    @keyframes icon-float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+
+    .sysinfo-title h2 { font-size: 18px; font-weight: 700; }
+    .sysinfo-title p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    .sysinfo-body { padding: 20px 24px; }
+
+    .section-label {
+      font-size: 11px; font-weight: 600; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--muted);
+      margin-bottom: 12px; margin-top: 20px;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      transition: all 0.3s;
+      cursor: default;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--accent3));
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .stat-card:hover {
+      border-color: rgba(99,179,237,0.3);
+      transform: translateY(-3px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+
+    .stat-card:hover::before { opacity: 1; }
+
+    .stat-label { font-size: 11px; color: var(--muted); font-weight: 500; margin-bottom: 8px; letter-spacing: 0.5px; }
+    .stat-value { font-size: 16px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .stat-value.accent { color: var(--accent); }
+    .stat-value.green { color: var(--accent2); }
+    .stat-value.warn { color: var(--warn); }
+    .stat-value.purple { color: var(--accent3); }
+
+    .stat-icon { float: right; font-size: 22px; opacity: 0.6; }
+
+    .ollama-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      margin-top: 12px;
+      display: flex; align-items: center; gap: 14px;
+      transition: all 0.3s;
+    }
+
+    .ollama-card:hover {
+      border-color: rgba(99,179,237,0.3);
+      transform: translateY(-2px);
+    }
+
+    .ollama-logo {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .ollama-details { flex: 1; }
+    .ollama-name { font-weight: 700; font-size: 14px; margin-bottom: 3px; }
+    #ollama-info { font-size: 12px; color: var(--text2); }
+
+    /* ═══════════════════════════════════════════════
+       AI COMMAND PANEL
+    ═══════════════════════════════════════════════ */
+    #panel-cmd {
+      background: var(--bg2);
+    }
+
+    .cmd-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      display: flex; align-items: center; gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .cmd-title { font-weight: 700; font-size: 15px; flex: 1; }
+    .cmd-sub { font-size: 11px; color: var(--muted); }
+
+    .cmd-body { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+
+    .cmd-model-row {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+    }
+
+    .cmd-input-wrap {
+      display: flex; gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+    }
+
+    #cmd-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    #cmd-input:focus {
+      border-color: rgba(99,179,237,0.5);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .btn-primary {
+      padding: 10px 20px;
+      background: linear-gradient(135deg, var(--accent), var(--accent3));
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px var(--accent-glow);
+    }
+
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .cmd-output {
+      flex: 1;
+      background: #000;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--accent2);
+      white-space: pre-wrap;
+      overflow-y: auto;
+      min-height: 150px;
+      line-height: 1.7;
+    }
+
+    .cmd-placeholder {
+      color: var(--muted);
+      text-align: center;
+      padding: 40px;
+    }
+
+    /* ═══════════════════════════════════════════════
+       GLOWING CARDS
+    ═══════════════════════════════════════════════ */
+    .glow-card {
+      position: relative;
+    }
+
+    .glow-card::after {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: inherit;
+      background: linear-gradient(135deg, var(--accent), var(--accent3), var(--accent2));
+      opacity: 0;
+      z-index: -1;
+      transition: opacity 0.3s;
+      filter: blur(8px);
+    }
+
+    .glow-card:hover::after { opacity: 0.15; }
+
+    /* ═══════════════════════════════════════════════
+       NOTIFICATIONS / TOASTS
+    ═══════════════════════════════════════════════ */
+    #toast-container {
+      position: fixed; bottom: 24px; right: 24px;
+      z-index: 9999;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+
+    .toast {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--text);
+      display: flex; align-items: center; gap: 10px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+      animation: toast-in 0.3s var(--trans);
+      max-width: 280px;
+    }
+
+    .toast.success { border-color: rgba(104,211,145,0.3); }
+    .toast.error { border-color: rgba(252,129,129,0.3); }
+
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateX(20px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes toast-out {
+      from { opacity: 1; transform: translateX(0); }
+      to   { opacity: 0; transform: translateX(20px); }
+    }
+
+    /* ═══════════════════════════════════════════════
+       MOBILE STYLES
+    ═══════════════════════════════════════════════ */
+    @media (max-width: 768px) {
+      :root { --header-h: 56px; }
+
+      header { padding: 0 14px; gap: 10px; }
+      .logo-sub { display: none; }
+      .status-pill { display: none; }
+
+      .tab-bar { display: none; }
+      .mobile-menu-btn { display: flex; }
+
+      /* Mobile nav drawer */
+      .mobile-nav {
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+        display: flex;
+        z-index: 200;
+        padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+        gap: 4px;
+        backdrop-filter: blur(20px);
+      }
+
+      .mobile-tab {
+        flex: 1;
+        display: flex; flex-direction: column;
+        align-items: center; gap: 3px;
+        padding: 8px 4px;
+        border-radius: 10px;
+        cursor: pointer;
+        color: var(--muted);
+        transition: all 0.2s;
+        font-size: 10px; font-weight: 500;
+        border: 1px solid transparent;
+      }
+
+      .mobile-tab.active {
+        color: var(--accent);
+        background: rgba(99,179,237,0.1);
+        border-color: rgba(99,179,237,0.2);
+      }
+
+      .mobile-tab-icon { font-size: 20px; }
+
+      .main { padding-bottom: 72px; }
+
+      .chat-container { padding: 14px; }
+      .msg-bubble { max-width: 88%; font-size: 13px; }
+      .welcome-grid { grid-template-columns: 1fr; }
+
+      .sysinfo-body { padding: 14px 16px; }
+      .sysinfo-header { padding: 16px 16px 0; }
+      .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .stat-value { font-size: 14px; }
+
+      .ai-header { padding: 10px 14px; }
+      .model-select { max-width: 130px; font-size: 11px; }
+      .chat-input-area { padding: 10px 14px; }
+      .quick-btns { display: none; }
+
+      .cmd-body { padding: 14px; }
+      .cmd-input-wrap { flex-direction: column; }
+
+      .term-toolbar { padding: 6px 10px; }
+      .term-actions .btn-sm span { display: none; }
+
+      #toast-container { bottom: 85px; right: 14px; }
+    }
+
+    @media (max-width: 380px) {
+      .stat-grid { grid-template-columns: 1fr; }
+      .logo-name { font-size: 13px; }
+    }
+
+    /* ═══════════════════════════════════════════════
+       LOADING STATES
+    ═══════════════════════════════════════════════ */
+    .skeleton {
+      background: linear-gradient(90deg, var(--surface) 25%, var(--surface2) 50%, var(--surface) 75%);
+      background-size: 200% 100%;
+      animation: skeleton-shine 1.5s infinite;
+      border-radius: 6px;
+    }
+
+    @keyframes skeleton-shine {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* Splash / loader */
+    #splash {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 20px;
+      transition: opacity 0.5s, visibility 0.5s;
+    }
+
+    #splash.hidden { opacity: 0; visibility: hidden; }
+
+    .splash-icon {
+      width: 72px; height: 72px;
+      background: linear-gradient(135deg, var(--accent), var(--accent3));
+      border-radius: 20px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px;
+      animation: splash-pop 0.6s var(--trans);
+      box-shadow: 0 0 60px var(--accent-glow);
+    }
+
+    @keyframes splash-pop {
+      0% { transform: scale(0.5); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .splash-title {
+      font-size: 28px; font-weight: 800;
+      background: linear-gradient(135deg, var(--accent), var(--accent3), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: fade-up 0.6s 0.2s var(--trans) both;
+    }
+
+    .splash-bar {
+      width: 200px; height: 3px;
+      background: var(--surface);
+      border-radius: 99px;
+      overflow: hidden;
+      animation: fade-up 0.6s 0.3s var(--trans) both;
+    }
+
+    .splash-progress {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent3));
+      border-radius: 99px;
+      animation: splash-load 1.5s var(--trans) forwards;
+    }
+
+    @keyframes splash-load {
+      0% { width: 0%; }
+      70% { width: 85%; }
+      100% { width: 100%; }
+    }
+
+    .splash-sub {
+      font-size: 12px; color: var(--muted);
+      animation: fade-up 0.6s 0.4s var(--trans) both;
+      font-family: 'JetBrains Mono', monospace;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Splash Screen ─────────────────────────────────────────────────── -->
+<div id="splash">
+  <div class="splash-icon">⚡</div>
+  <div class="splash-title">AI Cloud Terminal</div>
+  <div class="splash-bar"><div class="splash-progress"></div></div>
+  <div class="splash-sub">Initializing environment…</div>
+</div>
+
+<!-- ── Animated Canvas Background ───────────────────────────────────── -->
+<canvas id="canvas-bg"></canvas>
+<div class="grid-overlay"></div>
+
+<!-- ── Toast Container ──────────────────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<!-- ── Header ───────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <div class="logo-text">
+      <span class="logo-name">AI Cloud Terminal</span>
+      <span class="logo-sub">Local AI • No API Keys</span>
+    </div>
+  </div>
+
+  <nav class="tab-bar">
+    <div class="tab active" data-panel="terminal"><span class="tab-icon">💻</span> Terminal</div>
+    <div class="tab" data-panel="ai"><span class="tab-icon">🤖</span> AI Chat</div>
+    <div class="tab" data-panel="cmd"><span class="tab-icon">⚡</span> AI Commands</div>
+    <div class="tab" data-panel="sysinfo"><span class="tab-icon">📊</span> System</div>
+  </nav>
+
+  <div class="header-sep"></div>
+
+  <div class="status-pill">
+    <div class="dot" id="ollama-dot"></div>
+    <span id="ollama-label">Connecting…</span>
+  </div>
+
+  <div class="mobile-menu-btn" id="mobile-menu-btn">☰</div>
+</header>
+
+<!-- ── Main Content ──────────────────────────────────────────────────── -->
+<div class="main">
+
+  <!-- ── Terminal ── -->
+  <div class="panel active" id="panel-terminal">
+    <div class="term-toolbar">
+      <div class="term-dots">
+        <div class="term-dot red" title="Close"></div>
+        <div class="term-dot yellow" title="Minimize"></div>
+        <div class="term-dot green" title="Maximize"></div>
+      </div>
+      <div class="term-title">bash — AI Cloud Terminal</div>
+      <div class="term-actions">
+        <button class="btn-sm" id="btn-clear-term">🗑 <span>Clear</span></button>
+        <button class="btn-sm" id="btn-resize-term">⛶ <span>Fit</span></button>
+      </div>
+    </div>
+    <div id="term-container"></div>
+  </div>
+
+  <!-- ── AI Chat ── -->
+  <div class="panel" id="panel-ai">
+    <div class="ai-header">
+      <div class="ai-avatar">🤖</div>
+      <div class="ai-header-info">
+        <div class="ai-header-name">AI Assistant</div>
+        <div class="ai-header-sub">Powered by Ollama · Local · Private</div>
+      </div>
+      <div class="model-select-wrap">
+        <select class="model-select" id="model-select">
+          <option value="">⟳ Loading…</option>
+        </select>
+      </div>
+      <button class="btn-sm" id="btn-clear-chat">🗑</button>
+    </div>
+
+    <div class="chat-container" id="chat-messages">
+      <div class="welcome-msg">
+        <div style="font-size:48px;margin-bottom:12px;">🤖</div>
+        <h3>AI Assistant — No API Key Required</h3>
+        <p>All inference runs locally via <strong style="color:var(--accent)">Ollama</strong>.<br>Select a model above, then start chatting.</p>
+        <div class="welcome-grid">
+          <button class="quick-chip" data-q="Explain how this terminal works">
+            <span class="quick-chip-icon">💡</span>Explain this terminal
+          </button>
+          <button class="quick-chip" data-q="Write a bash script to check disk usage">
+            <span class="quick-chip-icon">📜</span>Write a bash script
+          </button>
+          <button class="quick-chip" data-q="What are the best Linux commands to know?">
+            <span class="quick-chip-icon">🐧</span>Linux commands
+          </button>
+          <button class="quick-chip" data-q="How do I use Ollama with Python?">
+            <span class="quick-chip-icon">🐍</span>Ollama + Python
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-input-area">
+      <div class="quick-btns">
+        <button class="quick-btn" data-q="Explain this code:">Explain code</button>
+        <button class="quick-btn" data-q="Write a bash script to">Write script</button>
+        <button class="quick-btn" data-q="How do I fix this error:">Fix error</button>
+        <button class="quick-btn" data-q="Optimize this command:">Optimize</button>
+        <button class="quick-btn" data-q="What is the best way to">Best practice</button>
+      </div>
+      <div class="input-row">
+        <textarea id="ai-input" placeholder="Ask AI anything… (Shift+Enter for newline, Enter to send)" rows="1"></textarea>
+        <button class="btn-send" id="btn-send-ai" title="Send">➤</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── AI Commands ── -->
+  <div class="panel" id="panel-cmd">
+    <div class="cmd-header">
+      <div style="font-size:22px">⚡</div>
+      <div>
+        <div class="cmd-title">AI Command Generator</div>
+        <div class="cmd-sub">Describe what you want to do in plain English</div>
+      </div>
+    </div>
+    <div class="cmd-body">
+      <div class="cmd-model-row">
+        <span style="font-size:12px;color:var(--muted);font-weight:500">Model:</span>
+        <div class="model-select-wrap">
+          <select class="model-select" id="cmd-model-select">
+            <option value="">Loading…</option>
+          </select>
+        </div>
+      </div>
+      <div class="cmd-input-wrap">
+        <input id="cmd-input" placeholder='e.g. "list all running processes sorted by memory"' />
+        <button class="btn-primary" id="btn-gen-cmd">⚡ Generate</button>
+      </div>
+      <div class="cmd-output" id="cmd-output">
+        <div class="cmd-placeholder">
+          <div style="font-size:36px;margin-bottom:12px">⚡</div>
+          <div style="color:var(--text2);font-size:14px">AI-generated command will appear here</div>
+          <div style="font-size:11px;margin-top:6px;font-family:'JetBrains Mono',monospace">plain English → shell command</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── System Info ── -->
+  <div class="panel" id="panel-sysinfo">
+    <div class="sysinfo-header">
+      <div class="sysinfo-icon">📊</div>
+      <div class="sysinfo-title">
+        <h2>System Information</h2>
+        <p>Runtime environment & AI engine status</p>
+      </div>
+    </div>
+    <div class="sysinfo-body">
+      <div class="section-label">Runtime</div>
+      <div class="stat-grid" id="sysinfo-grid">
+        <div class="stat-card skeleton" style="height:80px"></div>
+        <div class="stat-card skeleton" style="height:80px"></div>
+        <div class="stat-card skeleton" style="height:80px"></div>
+        <div class="stat-card skeleton" style="height:80px"></div>
+      </div>
+      <div class="section-label">AI Engine</div>
+      <div class="ollama-card glow-card">
+        <div class="ollama-logo">🦙</div>
+        <div class="ollama-details">
+          <div class="ollama-name">Ollama</div>
+          <div id="ollama-info"><span style="color:var(--muted)">Checking status…</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Mobile Bottom Navigation ─────────────────────────────────────── -->
+<nav class="mobile-nav" id="mobile-nav">
+  <div class="mobile-tab active" data-panel="terminal">
+    <span class="mobile-tab-icon">💻</span>Terminal
+  </div>
+  <div class="mobile-tab" data-panel="ai">
+    <span class="mobile-tab-icon">🤖</span>AI Chat
+  </div>
+  <div class="mobile-tab" data-panel="cmd">
+    <span class="mobile-tab-icon">⚡</span>Commands
+  </div>
+  <div class="mobile-tab" data-panel="sysinfo">
+    <span class="mobile-tab-icon">📊</span>System
+  </div>
+</nav>
+
+<!-- ── Scripts ───────────────────────────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   CANVAS BACKGROUND — Particle Field
+═══════════════════════════════════════════════════════════════════ */
+(function() {
+  const canvas = document.getElementById('canvas-bg');
+  const ctx = canvas.getContext('2d');
+  let W, H, particles;
+  const N = window.innerWidth < 768 ? 40 : 80;
+
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+
+  function mkParticle() {
+    return {
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: Math.random() * 1.8 + 0.3,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+      opacity: Math.random() * 0.5 + 0.1,
+      color: ['#63b3ed','#b794f4','#68d391','#76e4f7'][Math.floor(Math.random()*4)]
+    };
+  }
+
+  function init() {
+    resize();
+    particles = Array.from({length: N}, mkParticle);
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    particles.forEach((p, i) => {
+      // Move
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+      if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+
+      // Draw connections
+      particles.slice(i + 1).forEach(q => {
+        const dx = p.x - q.x, dy = p.y - q.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < 120) {
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(q.x, q.y);
+          ctx.strokeStyle = `rgba(99,179,237,${(1 - dist/120) * 0.12})`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      });
+
+      // Draw particle
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color.replace(')', `,${p.opacity})`).replace('rgb(', 'rgba(');
+      // Use a simpler color approach
+      ctx.globalAlpha = p.opacity;
+      ctx.fillStyle = p.color;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener('resize', resize);
+  init();
+  draw();
+})();
+
+/* ═══════════════════════════════════════════════════════════════════
+   SPLASH
+═══════════════════════════════════════════════════════════════════ */
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    document.getElementById('splash').classList.add('hidden');
+  }, 1500);
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   TOAST
+═══════════════════════════════════════════════════════════════════ */
+function showToast(msg, type = 'info', duration = 3000) {
+  const tc = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+  t.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
+  tc.appendChild(t);
+  setTimeout(() => {
+    t.style.animation = 'toast-out 0.3s var(--trans) forwards';
+    setTimeout(() => t.remove(), 300);
+  }, duration);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   TAB ROUTING
+═══════════════════════════════════════════════════════════════════ */
+function switchPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab, .mobile-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.panel === name);
+  });
+  const target = document.getElementById('panel-' + name);
+  if (target) {
+    target.classList.add('active');
+    if (name === 'sysinfo') loadSysinfo();
+    if (name === 'terminal' && fitAddon) setTimeout(() => fitAddon.fit(), 50);
+  }
+}
+
+document.querySelectorAll('.tab, .mobile-tab').forEach(tab => {
+  tab.addEventListener('click', () => switchPanel(tab.dataset.panel));
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   SOCKET
+═══════════════════════════════════════════════════════════════════ */
+const socket = io();
+
+/* ═══════════════════════════════════════════════════════════════════
+   XTERM TERMINAL
+═══════════════════════════════════════════════════════════════════ */
+const term = new Terminal({
+  theme: {
+    background: '#000000',
+    foreground: '#e8f4fd',
+    cursor: '#63b3ed',
+    cursorAccent: '#000',
+    black: '#1a1a2e', brightBlack: '#4a6080',
+    red: '#fc8181', brightRed: '#feb2b2',
+    green: '#68d391', brightGreen: '#9ae6b4',
+    yellow: '#f6ad55', brightYellow: '#fbd38d',
+    blue: '#63b3ed', brightBlue: '#90cdf4',
+    magenta: '#b794f4', brightMagenta: '#d6bcfa',
+    cyan: '#76e4f7', brightCyan: '#b2f5ea',
+    white: '#e8f4fd', brightWhite: '#ffffff',
+  },
+  fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
+  fontSize: window.innerWidth < 768 ? 12 : 14,
+  lineHeight: 1.45,
+  cursorBlink: true,
+  cursorStyle: 'block',
+  scrollback: 2000,
+  allowTransparency: true,
+});
+
+const fitAddon = new FitAddon.FitAddon();
+term.loadAddon(fitAddon);
+term.open(document.getElementById('term-container'));
+
+setTimeout(() => { fitAddon.fit(); }, 400);
+
+term.onData(d => socket.emit('terminal:input', d));
+socket.on('terminal:data', d => term.write(d));
+
+const resizeObs = new ResizeObserver(() => {
+  if (fitAddon) fitAddon.fit();
+});
+resizeObs.observe(document.getElementById('term-container'));
+
+term.onResize(({ cols, rows }) => {
+  socket.emit('terminal:resize', { cols, rows });
+});
+
+document.getElementById('btn-clear-term').addEventListener('click', () => {
+  term.clear();
+  showToast('Terminal cleared', 'success');
+});
+
+document.getElementById('btn-resize-term').addEventListener('click', () => {
+  if (fitAddon) { fitAddon.fit(); showToast('Terminal resized', 'info'); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   MODEL SELECT — populate both selects
+═══════════════════════════════════════════════════════════════════ */
+async function loadModels() {
+  try {
+    const r = await fetch('/api/models');
+    const d = await r.json();
+    const models = d.models || [];
+    const opts = models.length
+      ? models.map(m => `<option value="${m}">${m}</option>`).join('')
+      : '<option value="">No models — run: ollama pull llama3.2</option>';
+    document.getElementById('model-select').innerHTML = opts;
+    document.getElementById('cmd-model-select').innerHTML = opts;
+    updateOllamaStatus(!d.error, models);
+  } catch {
+    updateOllamaStatus(false, []);
+  }
+}
+
+function updateOllamaStatus(running, models) {
+  const dot = document.getElementById('ollama-dot');
+  const label = document.getElementById('ollama-label');
+  if (running) {
+    dot.classList.add('ok');
+    label.textContent = `Ollama · ${models.length} model${models.length !== 1 ? 's' : ''}`;
+  } else {
+    dot.classList.remove('ok');
+    label.textContent = 'Ollama offline';
+  }
+}
+
+loadModels();
+setInterval(loadModels, 30000);
+
+/* ═══════════════════════════════════════════════════════════════════
+   AI CHAT
+═══════════════════════════════════════════════════════════════════ */
+const chatEl = document.getElementById('chat-messages');
+let chatHistory = [];
+let aiStreaming = false;
+
+function appendMsg(role, content) {
+  const isAI = role === 'ai';
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.innerHTML = `
+    <div class="msg-avatar">${isAI ? '🤖' : '👤'}</div>
+    <div class="msg-bubble" id="msg-${Date.now()}">${formatContent(content)}</div>
+  `;
+  // Remove welcome if present
+  const welcome = chatEl.querySelector('.welcome-msg');
+  if (welcome) welcome.remove();
+  chatEl.appendChild(div);
+  chatEl.scrollTop = chatEl.scrollHeight;
+  return div.querySelector('.msg-bubble');
+}
+
+function formatContent(text) {
+  // Basic markdown-like formatting
+  return text
+    .replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
+      `<pre><code class="lang-${lang}">${escHtml(code.trim())}</code></pre>`)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/\n/g, '<br>');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function showTyping() {
+  const d = document.createElement('div');
+  d.className = 'msg ai';
+  d.id = 'typing-indicator';
+  d.innerHTML = `<div class="msg-avatar">🤖</div>
+    <div class="msg-bubble">
+      <div class="typing-indicator">
+        <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+      </div>
+    </div>`;
+  const welcome = chatEl.querySelector('.welcome-msg');
+  if (welcome) welcome.remove();
+  chatEl.appendChild(d);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function removeTyping() {
+  const t = document.getElementById('typing-indicator');
+  if (t) t.remove();
+}
+
+async function sendChat(msg) {
+  if (!msg.trim() || aiStreaming) return;
+  const model = document.getElementById('model-select').value;
+  if (!model) { showToast('Please select a model first', 'error'); return; }
+
+  aiStreaming = true;
+  document.getElementById('btn-send-ai').disabled = true;
+  appendMsg('user', msg);
+
+  const sessionId = 'chat-' + Date.now();
+  // history = all previous except the current user msg
+  const history = chatHistory.slice();
+  chatHistory.push({ role: 'user', content: msg });
+  showTyping();
+
+  let aiBubble = null;
+  let fullText = '';
+
+  socket.emit('ai:chat', { sessionId, model, message: msg, history });
+
+  function onChunk({ sessionId: sid, chunk }) {
+    if (sid !== sessionId) return;
+    if (!aiBubble) { removeTyping(); aiBubble = appendMsg('ai', ''); }
+    fullText += chunk;
+    aiBubble.innerHTML = formatContent(fullText);
+    chatEl.scrollTop = chatEl.scrollHeight;
+  }
+
+  function onDone({ sessionId: sid } = {}) {
+    if (sid && sid !== sessionId) return;
+    finish(fullText);
+  }
+
+  function onError({ sessionId: sid, error } = {}) {
+    if (sid && sid !== sessionId) return;
+    removeTyping();
+    appendMsg('ai', `⚠️ Error: ${error || 'Unknown error'}`);
+    finish('');
+  }
+
+  socket.on('ai:chunk', onChunk);
+  socket.once('ai:done', onDone);
+  socket.once('ai:error', onError);
+
+  function finish(text) {
+    if (text) chatHistory.push({ role: 'assistant', content: text });
+    aiStreaming = false;
+    document.getElementById('btn-send-ai').disabled = false;
+    socket.off('ai:chunk', onChunk);
+    socket.off('ai:done', onDone);
+    socket.off('ai:error', onError);
+  }
+}
+
+document.getElementById('btn-send-ai').addEventListener('click', () => {
+  const inp = document.getElementById('ai-input');
+  const v = inp.value.trim();
+  inp.value = '';
+  inp.style.height = 'auto';
+  sendChat(v);
+});
+
+document.getElementById('ai-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    document.getElementById('btn-send-ai').click();
+  }
+});
+
+document.getElementById('ai-input').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+
+document.querySelectorAll('.quick-btn, .quick-chip').forEach(btn => {
+  btn.onclick = () => {
+    const inp = document.getElementById('ai-input');
+    inp.value = btn.dataset.q;
+    inp.focus();
+    switchPanel('ai');
+  };
+});
+
+document.getElementById('btn-clear-chat').onclick = () => {
+  chatHistory = [];
+  chatEl.innerHTML = `<div class="welcome-msg">
+    <div style="font-size:48px;margin-bottom:12px">🤖</div>
+    <h3>AI Assistant — No API Key Required</h3>
+    <p>All inference runs locally via <strong style="color:var(--accent)">Ollama</strong>.<br>Select a model above, then start chatting.</p>
+  </div>`;
+  showToast('Chat cleared', 'success');
+};
+
+/* ═══════════════════════════════════════════════════════════════════
+   AI COMMANDS
+═══════════════════════════════════════════════════════════════════ */
+const cmdOutput = document.getElementById('cmd-output');
+let cmdStreaming = false;
+
+document.getElementById('btn-gen-cmd').addEventListener('click', async () => {
+  const q = document.getElementById('cmd-input').value.trim();
+  const model = document.getElementById('cmd-model-select').value;
+  if (!q) { showToast('Describe what command you need', 'error'); return; }
+  if (!model) { showToast('Select a model first', 'error'); return; }
+  if (cmdStreaming) return;
+
+  cmdStreaming = true;
+  document.getElementById('btn-gen-cmd').disabled = true;
+  cmdOutput.innerHTML = '<span style="color:var(--muted);font-family:\'JetBrains Mono\',monospace">⟳ Generating command…</span>';
+
+  let full = '';
+  socket.emit('ai:suggest-cmd', { model, prompt: q });
+
+  function onCmdChunk(chunk) {
+    full += chunk;
+    cmdOutput.textContent = full;
+  }
+
+  function done(result) {
+    cmdOutput.textContent = result || full;
+    cmdStreaming = false;
+    document.getElementById('btn-gen-cmd').disabled = false;
+    socket.off('ai:cmd-chunk', onCmdChunk);
+    socket.off('ai:cmd-error', errHandler);
+    showToast('Command generated!', 'success');
+  }
+
+  function errHandler(e) {
+    cmdOutput.innerHTML = `<span style="color:var(--danger)">Error: ${e}</span>`;
+    cmdStreaming = false;
+    document.getElementById('btn-gen-cmd').disabled = false;
+    socket.off('ai:cmd-chunk', onCmdChunk);
+  }
+
+  socket.on('ai:cmd-chunk', onCmdChunk);
+  socket.once('ai:cmd-done', done);
+  socket.once('ai:cmd-error', errHandler);
+});
+
+document.getElementById('cmd-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('btn-gen-cmd').click();
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   SYSINFO
+═══════════════════════════════════════════════════════════════════ */
+async function loadSysinfo() {
+  try {
+    const [sysR, modR] = await Promise.all([fetch('/api/sysinfo'), fetch('/api/models')]);
+    const d = await sysR.json();
+    const md = await modR.json();
+
+    document.getElementById('sysinfo-grid').innerHTML = `
+      <div class="stat-card glow-card">
+        <span class="stat-icon">🖥️</span>
+        <div class="stat-label">Platform</div>
+        <div class="stat-value accent">${d.platform} / ${d.arch}</div>
+      </div>
+      <div class="stat-card glow-card">
+        <span class="stat-icon">🏠</span>
+        <div class="stat-label">Hostname</div>
+        <div class="stat-value">${d.hostname}</div>
+      </div>
+      <div class="stat-card glow-card">
+        <span class="stat-icon">⚙️</span>
+        <div class="stat-label">CPUs</div>
+        <div class="stat-value green">${d.cpus} cores</div>
+      </div>
+      <div class="stat-card glow-card">
+        <span class="stat-icon">🧠</span>
+        <div class="stat-label">Total Memory</div>
+        <div class="stat-value purple">${d.totalMem}</div>
+      </div>
+      <div class="stat-card glow-card">
+        <span class="stat-icon">💚</span>
+        <div class="stat-label">Free Memory</div>
+        <div class="stat-value green">${d.freeMem}</div>
+      </div>
+      <div class="stat-card glow-card">
+        <span class="stat-icon">⏱️</span>
+        <div class="stat-label">Uptime</div>
+        <div class="stat-value warn">${d.uptime}</div>
+      </div>
+      <div class="stat-card glow-card">
+        <span class="stat-icon">🟢</span>
+        <div class="stat-label">Node.js</div>
+        <div class="stat-value accent">${d.node}</div>
+      </div>
+      <div class="stat-card glow-card">
+        <span class="stat-icon">🤖</span>
+        <div class="stat-label">AI Engine</div>
+        <div class="stat-value purple">Ollama (local)</div>
+      </div>
+    `;
+
+    const infoEl = document.getElementById('ollama-info');
+    if (md.error) {
+      infoEl.innerHTML = `<span style="color:var(--warn)">⚠️ ${md.error}</span>`;
+    } else {
+      const mlist = (md.models || []).join(', ') || 'none installed';
+      infoEl.innerHTML = `<span style="color:var(--accent2)">✅ Running</span> &nbsp;·&nbsp; <span style="color:var(--text2)">${md.models.length} model(s): <code style="color:var(--accent)">${mlist}</code></span>`;
+    }
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   OLLAMA STATUS EVENTS
+═══════════════════════════════════════════════════════════════════ */
+socket.on('ollama:status', ({ running, models }) => {
+  updateOllamaStatus(running, models || []);
+});
+
+socket.on('connect', () => {
+  socket.emit('ollama:check');
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   WINDOW RESIZE
+═══════════════════════════════════════════════════════════════════ */
+window.addEventListener('resize', () => {
+  if (fitAddon) fitAddon.fit();
+  term.options.fontSize = window.innerWidth < 768 ? 12 : 14;
+});
+</script>
+</body>
+</html>
